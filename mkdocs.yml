@@ -1,0 +1,11 @@
+site_name: "1С Conferences"
+site_url: https://untru.github.io/1c-conferences/
+theme:
+  name: material
+  language: ru
+
+nav:
+  - Главная: index.md
+  - Конференции:
+      - "2025": events/2025/index.md
+  - О проекте: about.md
