@@ -1,0 +1,111 @@
+name: ✅ Проверка качества
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  quality-check:
+    name: 🔍 Проверить качество
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Загрузить код
+        uses: actions/checkout@v4
+
+      - name: 🐍 Настроить Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Установить зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🗂️ Проверить навигацию
+        run: |
+          python generate_nav.py
+          echo "✅ Навигация сгенерирована успешно"
+
+      - name: 🔍 Проверить синтаксис MkDocs
+        run: |
+          # Собираем с предупреждениями (не строгий режим)
+          mkdocs build --verbose
+          echo "✅ MkDocs собран успешно"
+
+      - name: 📝 Проверить ссылки
+        run: |
+          # Проверяем, что все файлы в навигации существуют
+          python -c "
+          import yaml
+          import os
+          from pathlib import Path
+          
+          with open('mkdocs.yml', 'r', encoding='utf-8') as f:
+              config = yaml.safe_load(f)
+          
+          nav = config.get('nav', [])
+          missing_files = []
+          
+          def check_nav_items(items):
+              for item in items:
+                  if isinstance(item, dict):
+                      for key, value in item.items():
+                          if isinstance(value, list):
+                              check_nav_items(value)
+                          elif isinstance(value, str) and ':' in value:
+                              file_path = value.split(':', 1)[1].strip()
+                              if not file_path.startswith('http') and not file_path.startswith('#'):
+                                  if not os.path.exists(f'docs/{file_path}'):
+                                      missing_files.append(file_path)
+                  elif isinstance(item, str) and ':' in item:
+                      file_path = item.split(':', 1)[1].strip()
+                      if not file_path.startswith('http') and not file_path.startswith('#'):
+                          if not os.path.exists(f'docs/{file_path}'):
+                              missing_files.append(file_path)
+                  elif isinstance(item, list):
+                      check_nav_items(item)
+          
+          check_nav_items(nav)
+          
+          if missing_files:
+              print(f'❌ Отсутствующие файлы: {missing_files}')
+              exit(1)
+          else:
+              print('✅ Все файлы в навигации существуют')
+          "
+
+      - name: 🎯 Проверить структуру событий
+        run: |
+          # Проверяем, что все события имеют правильную структуру
+          python -c "
+          import os
+          from pathlib import Path
+          
+          events_dir = Path('docs/events')
+          if not events_dir.exists():
+              print('❌ Директория событий не найдена')
+              exit(1)
+          
+          for year_dir in events_dir.iterdir():
+              if year_dir.is_dir() and year_dir.name.isdigit():
+                  index_file = year_dir / 'index.md'
+                  if not index_file.exists():
+                      print(f'❌ Отсутствует index.md для года {year_dir.name}')
+                      exit(1)
+                  
+                  events = list(year_dir.glob('*.md'))
+                  if len(events) < 2:  # index.md + хотя бы одно событие
+                      print(f'⚠️ В году {year_dir.name} мало событий')
+          
+          print('✅ Структура событий корректна')
+          "
+
+      - name: 🎉 Завершено
+        run: |
+          echo "🎉 Все проверки пройдены успешно!"
+          echo "📋 Сайт готов к деплою"
